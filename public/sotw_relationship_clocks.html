@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;1,8..60,400&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#f5f0e8;font-family:'Source Serif 4',Georgia,serif;padding:20px;color:#2a2218;}
+body.touch-dragging{overflow:hidden;touch-action:none;}
+h1{font-family:'Cinzel',serif;font-size:18px;color:#7a5500;letter-spacing:2px;margin-bottom:4px;}
+.subtitle{font-size:12px;color:#8a7a62;font-style:italic;margin-bottom:16px;}
+.section-label{font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;color:#7a5500;font-weight:600;margin:16px 0 8px;padding:4px 10px;background:#fdf7e6;border:1px solid #c09820;border-radius:3px;display:inline-block;}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:8px;min-height:20px;}
+/* Cards */
+.card{background:#fff;border:1px solid #ddd6c4;border-radius:5px;padding:10px 12px;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:grab;user-select:none;transition:box-shadow .15s,border-color .15s,opacity .15s;}
+.card:active{cursor:grabbing;}
+.card.dragging{opacity:.35;box-shadow:none;}
+.card.drag-over{border-color:#c09820;box-shadow:0 0 0 2px rgba(192,152,32,.3);}
+.card.npc-hidden{opacity:.5;background:#f0ebe0;border-style:dashed;cursor:grab;}
+.card-header{display:flex;align-items:baseline;gap:6px;margin-bottom:1px;flex-wrap:wrap;}
+.card-name{font-family:'Cinzel',serif;font-size:11px;font-weight:600;color:#2a2218;}
+.card-pronouns{font-size:9px;color:#aaa098;font-style:italic;}
+.card-role{font-size:10px;color:#8a7a62;font-style:italic;margin-bottom:8px;}
+.clock-wrap{display:flex;justify-content:center;margin-bottom:4px;}
+.clock-wrap svg path{transition:filter .1s;}
+.clock-wrap svg path:hover{filter:brightness(.85);}
+.zone-status{font-size:10px;font-weight:600;letter-spacing:.5px;text-align:center;margin-bottom:4px;}
+.reward-wrap{border-top:1px solid #eee;padding-top:5px;margin-top:4px;}
+.reward{font-size:9px;color:#5a4e3a;line-height:1.4;}
+.reward em{color:#7a5500;font-style:normal;font-weight:600;}
+.reward-locked{font-size:9px;color:#aaa098;font-style:italic;}
+.reward-ready{font-size:9px;color:#267838;font-style:italic;}
+.note-text{font-size:9px;color:#7a5500;margin-top:3px;font-style:italic;}
+.note-input{width:100%;border:1px solid #e0d8cc;border-radius:3px;padding:4px 6px;font-size:9px;font-family:'Source Serif 4',serif;color:#2a2218;background:#faf6ed;resize:none;height:46px;margin-top:6px;display:block;}
+.note-input:focus{outline:none;border-color:#c09820;background:#fff;}
+.note-input::placeholder{color:#bbb098;}
+/* GM card controls */
+.gm-card-controls{margin-top:5px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.reveal-btn{font-size:8px;font-family:'Cinzel',serif;padding:2px 7px;border-radius:3px;cursor:pointer;border:1px solid;touch-action:manipulation;}
+.reveal-btn.reveal{background:#f0f7f0;border-color:#267838;color:#267838;}
+.reveal-btn.reveal:hover{background:#d5ead9;}
+.reveal-btn.hide{background:#fdf7e6;border-color:#c09820;color:#8a6800;}
+.reveal-btn.hide:hover{background:#f5e8b0;}
+.revealed-badge{font-size:8px;color:#267838;font-family:'Cinzel',serif;letter-spacing:.5px;}
+.hide-npc-btn{font-size:8px;font-family:'Cinzel',serif;padding:2px 7px;border-radius:3px;cursor:pointer;border:1px solid #bbb;background:#f5f0e8;color:#8a7a62;touch-action:manipulation;}
+.hide-npc-btn:hover{background:#e8e0d0;}
+.hidden-from-players{font-family:'Cinzel',serif;font-size:8px;color:#aaa098;letter-spacing:1px;margin-bottom:6px;}
+.reset-btn{font-size:9px;background:none;border:1px solid #bbb;border-radius:3px;padding:3px 8px;cursor:pointer;color:#8a7a62;margin-top:4px;font-family:'Source Serif 4',serif;touch-action:manipulation;}
+.reset-btn:hover{background:#f5f0e8;}
+/* Top bar */
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
+.gm-toggle{font-family:'Cinzel',serif;font-size:9px;padding:5px 12px;border-radius:3px;cursor:pointer;border:1px solid #bbb;background:#f5f0e8;color:#8a7a62;letter-spacing:1px;touch-action:manipulation;}
+.gm-toggle.active{background:#2a2218;border-color:#2a2218;color:#fdf7e6;}
+.gm-banner{display:none;background:#2a2218;color:#fdf7e6;font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;text-align:center;padding:5px;margin:-20px -20px 16px;width:calc(100% + 40px);}
+.gm-banner.visible{display:block;}
+/* Controls row */
+.controls{margin-bottom:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.ctrl-btn{font-family:'Cinzel',serif;font-size:10px;padding:6px 14px;border-radius:3px;cursor:pointer;border:1px solid;transition:background .12s;touch-action:manipulation;}
+.ctrl-btn.add-btn{background:#f0f7f0;border-color:#267838;color:#267838;}
+.ctrl-btn.add-btn:hover{background:#d5ead9;}
+.ctrl-btn.reset-all{background:#fdf7e6;border-color:#c09820;color:#7a5500;}
+.ctrl-btn.reset-all:hover{background:#f5e8b0;}
+.sort-group{display:flex;gap:0;border:1px solid #c09820;border-radius:3px;overflow:hidden;}
+.sort-btn{font-family:'Cinzel',serif;font-size:10px;padding:5px 10px;cursor:pointer;border:none;border-right:1px solid #c09820;background:#fdf7e6;color:#7a5500;touch-action:manipulation;transition:background .1s;}
+.sort-btn:last-child{border-right:none;}
+.sort-btn:hover{background:#f5e8b0;}
+.sort-btn.active{background:#c09820;color:#fff;}
+.scale-wrap{display:flex;align-items:center;gap:6px;font-family:'Cinzel',serif;font-size:10px;color:#7a5500;}
+.scale-wrap input[type=range]{width:72px;touch-action:manipulation;cursor:pointer;}
+/* Legend */
+.legend{display:flex;gap:14px;margin-bottom:12px;flex-wrap:wrap;}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:#5a4e3a;}
+.legend-swatch{width:14px;height:14px;border-radius:50%;border:2px solid;}
+/* Modals */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center;padding:16px;}
+.modal-overlay.open{display:flex;}
+.modal{background:#fdf7e6;border:1px solid #c09820;border-radius:6px;padding:22px 24px;width:380px;max-width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2);}
+.modal.narrow{width:280px;}
+.modal h2{font-family:'Cinzel',serif;font-size:14px;color:#7a5500;margin-bottom:16px;letter-spacing:1px;}
+.form-row{margin-bottom:11px;}
+.form-row label{display:block;font-size:9px;font-family:'Cinzel',serif;letter-spacing:1px;color:#7a5500;margin-bottom:3px;font-weight:600;}
+.form-row input,.form-row select,.form-row textarea{width:100%;border:1px solid #c09820;border-radius:3px;padding:7px 8px;font-size:14px;font-family:'Source Serif 4',serif;background:#fff;color:#2a2218;-webkit-appearance:none;appearance:none;}
+.form-row textarea{height:64px;resize:vertical;font-size:13px;}
+.form-row input[type=range]{padding:0;border:none;background:none;cursor:pointer;height:28px;}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+.modal-btns button{font-family:'Cinzel',serif;font-size:11px;padding:8px 18px;border-radius:3px;cursor:pointer;border:1px solid;touch-action:manipulation;}
+.btn-cancel{background:#f5f0e8;border-color:#bbb;color:#8a7a62;}
+.btn-cancel:hover{background:#e8e0d0;}
+.btn-add{background:#fdf7e6;border-color:#c09820;color:#7a5500;}
+.btn-add:hover{background:#f5e8b0;}
+.error-msg{font-size:10px;color:#c03828;margin-top:6px;display:none;}
+</style>
+</head>
+<body>
+
+<div class="gm-banner" id="gm-banner">GM MODE — HIDDEN REWARDS &amp; NPCS VISIBLE</div>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>Relationship Clocks</h1>
+    <p class="subtitle">Shadow of the Wolf · tap segments to fill · hold &amp; drag to reorder</p>
+  </div>
+  <button class="gm-toggle" id="gm-toggle" onclick="toggleGM()">GM MODE</button>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-swatch" style="background:#c03828;border-color:#9a2010;"></div> Frosty (0–3)</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#c09820;border-color:#8a6800;"></div> Neutral (4–7)</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#267838;border-color:#165022;"></div> Friendly (8–10)</div>
+</div>
+
+<div class="controls">
+  <div class="sort-group">
+    <button class="sort-btn active" id="sort-custom" onclick="setSort('custom')">Custom</button>
+    <button class="sort-btn" id="sort-name" onclick="setSort('name')">A–Z</button>
+    <button class="sort-btn" id="sort-standing" onclick="setSort('standing')">Standing</button>
+  </div>
+  <div class="scale-wrap">
+    Size
+    <input type="range" id="scale-slider" min="0.75" max="2.5" step="0.25" value="1"
+      oninput="setScale(this.value)">
+    <span id="scale-val">100%</span>
+  </div>
+  <button class="ctrl-btn add-btn" id="add-btn" onclick="openModal()" style="display:none">+ New Clock</button>
+  <button class="ctrl-btn reset-all" id="reset-btn" onclick="resetAll()" style="display:none">Reset All</button>
+</div>
+
+<!-- Password modal -->
+<div class="modal-overlay" id="pw-modal" onclick="if(event.target===this)closePWModal()">
+  <div class="modal narrow">
+    <h2>GM Mode</h2>
+    <div class="form-row">
+      <label>Password</label>
+      <input type="password" id="pw-input" placeholder="Enter GM password"
+        onkeydown="if(event.key==='Enter')checkGMPassword()">
+    </div>
+    <div class="error-msg" id="pw-error">Incorrect password.</div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closePWModal()">Cancel</button>
+      <button class="btn-add" onclick="checkGMPassword()">Enter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Clock modal -->
+<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h2>New Relationship Clock</h2>
+    <div class="form-row">
+      <label>Section</label>
+      <select id="m-section" onchange="toggleNewSection()"></select>
+    </div>
+    <div class="form-row" id="new-section-row" style="display:none">
+      <label>New Section Name</label>
+      <input type="text" id="m-new-section" placeholder="e.g. Mission 3">
+    </div>
+    <div class="form-row">
+      <label>Name</label>
+      <input type="text" id="m-name" placeholder="NPC Name" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <label>Pronouns</label>
+      <input type="text" id="m-pronouns" placeholder="she/her, he/him, they/them…" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <label>Role / Affiliation</label>
+      <input type="text" id="m-role" placeholder="Title · House" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <label>Disposition (optional)</label>
+      <input type="text" id="m-disposition" placeholder="e.g. WATCHFUL" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <label>Starting Value: <span id="m-start-val">5</span>/10</label>
+      <input type="range" id="m-start" min="0" max="10" value="5"
+        oninput="document.getElementById('m-start-val').textContent=this.value">
+    </div>
+    <div class="form-row">
+      <label>Friendly Reward</label>
+      <textarea id="m-reward" placeholder="Benefit at Friendly standing"></textarea>
+    </div>
+    <div class="form-row">
+      <label>Note (optional)</label>
+      <input type="text" id="m-note" placeholder="Conditional start value, etc." autocomplete="off">
+    </div>
+    <div class="error-msg" id="m-error"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-add" onclick="addClock()">Add Clock</button>
+    </div>
+  </div>
+</div>
+
+<div id="app"></div>
+
+<script>
+// ---- Change this before sharing the URL with players ----
+const GM_PASSWORD = 'ShadowOfTheWolf';
+
+const COLORS = {
+  frosty:  { fill:'#c03828', stroke:'#9a2010', empty:'#faeae8', emptyStroke:'#e8a090' },
+  neutral: { fill:'#c09820', stroke:'#8a6800', empty:'#fdf5d0', emptyStroke:'#e0c860' },
+  friendly:{ fill:'#267838', stroke:'#165022', empty:'#dff0e3', emptyStroke:'#90c8a0' },
+};
+
+const DEFAULT_SECTIONS = [
+  { section:"Faculty", members:[
+    { name:"Archchancellor Sigune", pronouns:"she/her", role:"Archchancellor · House of Order", start:5, disposition:"WATCHFUL",
+      reward:"+ Acc on checks to influence College faculty or staff" },
+    { name:"Underbaron Iphianassa", pronouns:"she/her", role:"Tactical Syllabus · House of Stone", start:4, disposition:"HAWKISH",
+      reward:"RKF Tagetes + Redundant Systems Upgrade" },
+    { name:"Lord Castor-Eyros", pronouns:"he/they", role:"Noble Arts Syllabus · House of Smoke", start:6, disposition:"OPTIMISTIC",
+      reward:"RKF Taraxacum + MULE Harness" },
+    { name:"Stablemaster Imani", pronouns:"they/them", role:"Technical Syllabus · House of Water", start:5, disposition:"FOCUSED",
+      reward:"HORUS Hecatoncheires + Hive Drone" },
+    { name:"Lady Achilleia", pronouns:"she/her", role:"Fencing & Athletics · House of Glass", start:6, disposition:"HOPEFUL",
+      reward:"Entangled Co-Consciousness Rig (Exotic Gear)" },
+    { name:"Lord Hesketh VIII", pronouns:"he/him", role:"Intelligence & Recon · House of Moments", start:5, disposition:"DISTANT",
+      reward:"1/mission Smart Ammo reserve" },
+    { name:"Dean Hebriyah", pronouns:"she/her", role:"Dean · House of Stone", start:4, disposition:"DISTRUSTING",
+      reward:"1/mission Reinforcements reserve (College grounds only)" },
+    { name:"Eligos (NHP)", pronouns:"it/its", role:"Administrative NHP · House of Order", start:2, disposition:"DISDAIN",
+      reward:"Access to College records & systems (+Acc)",
+      note:"Requires a Heroic roll to improve past Frosty" },
+  ]},
+  { section:"Students — Antagonists", members:[
+    { name:"Lord Praya-Cannamos", pronouns:"she/her", role:"Antagonist · House of Stone", start:2, disposition:"BELLIGERENT",
+      reward:"Hesitates at Combat 8 start (one free move per PC)" },
+    { name:"Count Argo-Laurent", pronouns:"he/him", role:"Antagonist · House of Sand", start:1, disposition:"SNIPING",
+      reward:"Divulges full plan in Beat 10 without a skill check" },
+  ]},
+  { section:"Students — Ensemble", members:[
+    { name:"Principissa Elsa Zoeva", pronouns:"she/her", role:"House of Order · Archchancellor's daughter", start:3, disposition:"HAUGHTY",
+      reward:"1/mission Redundant Repair reserve" },
+    { name:"Lady Kiriona (Brightstar)", pronouns:"she/her", role:"House of Moments · Former pankrati", start:6, disposition:"GREGARIOUS",
+      reward:"Champion's Favour (Exotic Gear)" },
+    { name:"Lord Tomas Alfaroz", pronouns:"he/him", role:"Student · House of Remembrance", start:5, disposition:"FEARFUL",
+      reward:"RKF Taraxacum + Aceso Stabilizer" },
+    { name:"Vivian & Valentine Reis", pronouns:"any/all", role:"Students · House of Glass · Information brokers", start:6, disposition:"MERCURIAL",
+      reward:"1/mission Blackmail reserve" },
+    { name:"Lord Aloysius Veredus Flyte", pronouns:"he/him", role:"Student · House of Smoke", start:6, disposition:"CURIOUS",
+      reward:"HORUS Hecatoncheires + Scanner Swarm" },
+    { name:"Captain Hedros Nadeer", pronouns:"he/him", role:"Student · House of Dust", start:5, disposition:"STRAIGHTFORWARD",
+      reward:"RKF Tagetes + ANDROMEDA Heavy Laser Rifle" },
+    { name:"Kay", pronouns:"she/her", role:"Student · House of Water", start:5, disposition:"SHY",
+      reward:"Extra Repairs reserve 1/mission for each PC" },
+    { name:"Rawan Azar", pronouns:"she/they", role:"House of Promise · Republican agent", start:6, disposition:"CAUTIOUS",
+      reward:"1/mission Core Battery reserve",
+      note:"Start at 6 if rescued in Beat 2; 3 if not" },
+  ]},
+  { section:"Mission 2", members:[
+    { name:"Augur Kahin", pronouns:"", role:"Xenogloss Augur · Order Xenoglossia", start:5, disposition:"",
+      reward:"1/mission Safe Harbor reserve" },
+    { name:"Soto", pronouns:"", role:"Grammaton Monk · Kahin's bodyguard", start:5, disposition:"",
+      reward:"1/mission Diversion reserve" },
+  ]},
+];
+
+// ---- State ----
+let sections   = JSON.parse(localStorage.getItem('sotw_sections')  || 'null');
+if (!sections) sections = DEFAULT_SECTIONS.map(s => ({section:s.section, members:s.members.map(m=>({...m}))}));
+
+let state      = JSON.parse(localStorage.getItem('sotw_state')     || '{}');
+let revealed   = JSON.parse(localStorage.getItem('sotw_revealed')  || '{}');
+let hiddenNPCs = JSON.parse(localStorage.getItem('sotw_hidden')    || '{}');
+// GM mode uses sessionStorage — clears when the browser tab closes
+let gmMode      = sessionStorage.getItem('sotw_gm') === '1';
+let sortMode    = 'custom';
+let cardScale   = +(localStorage.getItem('sotw_scale') || '1');
+let playerNotes = JSON.parse(localStorage.getItem('sotw_notes') || '{}');
+
+sections.forEach(sec => sec.members.forEach(m => {
+  if (state[m.name]      === undefined) state[m.name]      = m.start;
+  if (revealed[m.name]   === undefined) revealed[m.name]   = false;
+  if (hiddenNPCs[m.name] === undefined) hiddenNPCs[m.name] = false;
+  if (playerNotes[m.name] === undefined) playerNotes[m.name] = '';
+}));
+
+function save() {
+  localStorage.setItem('sotw_sections', JSON.stringify(sections));
+  localStorage.setItem('sotw_state',    JSON.stringify(state));
+  localStorage.setItem('sotw_revealed', JSON.stringify(revealed));
+  localStorage.setItem('sotw_hidden',   JSON.stringify(hiddenNPCs));
+}
+
+function saveNote(name, text) {
+  playerNotes[name] = text;
+  fetch('/notes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, text }),
+  }).catch(() => {}); // fail silently if server unreachable
+}
+
+async function loadNotesFromServer() {
+  try {
+    const r = await fetch('/notes');
+    if (r.ok) {
+      const data = await r.json();
+      playerNotes = data;
+      render();
+    }
+  } catch {}
+}
+
+async function loadHiddenFromServer() {
+  try {
+    const r = await fetch('/hidden');
+    if (r.ok) {
+      const data = await r.json();
+      hiddenNPCs = data;
+      render();
+    }
+  } catch {}
+}
+
+// ---- Sort & Scale ----
+function setSort(mode) {
+  sortMode = mode;
+  ['custom','name','standing'].forEach(m => {
+    document.getElementById('sort-' + m).classList.toggle('active', m === mode);
+  });
+  render();
+}
+
+function sortedIndices(members) {
+  const idx = members.map((_, i) => i);
+  if (sortMode === 'name')     idx.sort((a,b) => members[a].name.localeCompare(members[b].name));
+  if (sortMode === 'standing') idx.sort((a,b) => state[members[b].name] - state[members[a].name]);
+  return idx;
+}
+
+function setScale(val) {
+  cardScale = +val;
+  localStorage.setItem('sotw_scale', cardScale);
+  document.getElementById('app').style.zoom = cardScale;
+  document.getElementById('scale-val').textContent = Math.round(cardScale * 100) + '%';
+}
+
+// ---- Zone helpers ----
+function zone(seg) { return seg <= 3 ? 'frosty' : seg <= 7 ? 'neutral' : 'friendly'; }
+function zoneLabel(filled) {
+  if (filled <= 3) return { text:'FROSTY',  color:'#9a2010' };
+  if (filled <= 7) return { text:'NEUTRAL',  color:'#8a6800' };
+  return               { text:'FRIENDLY', color:'#267838' };
+}
+
+// ---- SVG Clock ----
+function svgClock(si, mi) {
+  const npc    = sections[si].members[mi];
+  const filled = state[npc.name];
+  const cx = 48, cy = 48, r = 42, GAP = 3;
+  let paths = '';
+
+  for (let i = 1; i <= 10; i++) {
+    const sRad = (-90 + (i-1)*36 + GAP/2) * Math.PI/180;
+    const eRad = (-90 +  i   *36 - GAP/2) * Math.PI/180;
+    const x1 = cx + r*Math.cos(sRad), y1 = cy + r*Math.sin(sRad);
+    const x2 = cx + r*Math.cos(eRad), y2 = cy + r*Math.sin(eRad);
+    const c  = COLORS[zone(i)];
+    const fill   = i <= filled ? c.fill   : c.empty;
+    const stroke = i <= filled ? c.stroke : c.emptyStroke;
+    const cursor = gmMode ? 'pointer' : 'default';
+    paths += `<path d="M48,48 L${x1.toFixed(2)},${y1.toFixed(2)} A42,42 0 0,1 ${x2.toFixed(2)},${y2.toFixed(2)} Z"`
+           + ` fill="${fill}" stroke="${stroke}" stroke-width="1"`
+           + ` data-seg="${i}" style="cursor:${cursor}"`
+           + ` onclick="toggle(${si},${mi},${i})"/>`;
+  }
+
+  const zl = zoneLabel(filled);
+  paths += `<circle cx="48" cy="48" r="17" fill="white" stroke="#e0d8cc" stroke-width="1.5" style="pointer-events:none"/>`;
+  paths += `<text x="48" y="45" text-anchor="middle" dominant-baseline="middle" font-size="14" font-weight="700"`
+         + ` fill="${zl.color}" font-family="Cinzel,serif" style="pointer-events:none">${filled}</text>`;
+  paths += `<text x="48" y="57" text-anchor="middle" dominant-baseline="middle" font-size="8"`
+         + ` fill="#8a7a62" style="pointer-events:none">/ 10</text>`;
+
+  return `<svg width="96" height="96" viewBox="0 0 96 96" draggable="false"`
+       + ` ontouchend="svgTouchEnd(event,${si},${mi})">${paths}</svg>`;
+}
+
+function svgTouchEnd(e, si, mi) {
+  if (!gmMode) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const t = e.changedTouches[0];
+  const el = document.elementFromPoint(t.clientX, t.clientY);
+  const seg = el && +el.dataset.seg;
+  if (seg) toggle(si, mi, seg);
+}
+
+// ---- Render ----
+function renderCard(si, mi, draggable) {
+  const npc       = sections[si].members[mi];
+  const filled    = state[npc.name];
+  const isRev     = revealed[npc.name];
+  const isHidden  = hiddenNPCs[npc.name];
+  const zl        = zoneLabel(filled);
+  const isFriendly = filled >= 8;
+
+  const pronounsHtml = npc.pronouns ? `<span class="card-pronouns">${npc.pronouns}</span>` : '';
+  const statusParts  = [zl.text];
+  if (npc.disposition) statusParts.push(npc.disposition);
+  statusParts.push(`${filled}/10`);
+
+  // Reward block
+  let rewardHtml;
+  if (gmMode) {
+    const revClass = isRev ? 'hide' : 'reveal';
+    const revLabel = isRev ? 'Hide reward' : (isFriendly ? '★ Reveal reward' : 'Reveal reward');
+    rewardHtml = `
+      <div class="reward-wrap">
+        <div class="reward"><em>Friendly:</em> ${npc.reward}</div>
+        <div class="gm-card-controls">
+          <button class="reveal-btn ${revClass}" onclick="toggleReveal(${si},${mi})">${revLabel}</button>
+          ${isRev ? '<span class="revealed-badge">REVEALED</span>' : ''}
+          <button class="hide-npc-btn" onclick="toggleHideNPC(${si},${mi})">${isHidden ? 'Show NPC' : 'Hide NPC'}</button>
+        </div>
+      </div>`;
+  } else if (isRev) {
+    rewardHtml = `<div class="reward-wrap"><div class="reward"><em>Friendly:</em> ${npc.reward}</div></div>`;
+  } else {
+    const hint = isFriendly
+      ? `<div class="reward-ready">Reward available — pending GM reveal</div>`
+      : `<div class="reward-locked">Reward hidden</div>`;
+    rewardHtml = `<div class="reward-wrap">${hint}</div>`;
+  }
+
+  const noteHtml  = npc.note ? `<div class="note-text">&#9888; ${npc.note}</div>` : '';
+  const resetHtml = gmMode   ? `<button class="reset-btn" onclick="resetOne(${si},${mi})">Reset to ${npc.start}</button>` : '';
+  const safeKey   = npc.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  const partyNote = `<textarea class="note-input" placeholder="Party notes…" oninput="saveNote('${safeKey}',this.value)">${(playerNotes[npc.name]||'').replace(/</g,'&lt;')}</textarea>`;
+  const hiddenBadge = (gmMode && isHidden) ? `<div class="hidden-from-players">HIDDEN FROM PLAYERS</div>` : '';
+
+  return `
+<div class="card${isHidden && gmMode ? ' npc-hidden' : ''}" draggable="${draggable}" data-si="${si}" data-mi="${mi}">
+  ${hiddenBadge}
+  <div class="card-header">
+    <span class="card-name">${npc.name}</span>
+    ${pronounsHtml}
+  </div>
+  <div class="card-role">${npc.role}</div>
+  <div class="clock-wrap">${svgClock(si, mi)}</div>
+  <div class="zone-status" style="color:${zl.color}">${statusParts.join(' · ')}</div>
+  ${rewardHtml}
+  ${noteHtml}
+  ${partyNote}
+  ${resetHtml}
+</div>`;
+}
+
+function render() {
+  const gmToggle = document.getElementById('gm-toggle');
+  const gmBanner = document.getElementById('gm-banner');
+  const addBtn   = document.getElementById('add-btn');
+  const resetBtn = document.getElementById('reset-btn');
+  gmToggle.classList.toggle('active', gmMode);
+  gmBanner.classList.toggle('visible', gmMode);
+  addBtn.style.display   = gmMode ? 'inline-block' : 'none';
+  resetBtn.style.display = gmMode ? 'inline-block' : 'none';
+
+  const draggable = gmMode && sortMode === 'custom';
+  let html = '';
+  sections.forEach((sec, si) => {
+    const visibleIndices = sortedIndices(sec.members).filter(mi => {
+      const npc = sec.members[mi];
+      return gmMode || !hiddenNPCs[npc.name];
+    });
+    if (visibleIndices.length === 0) return;
+    html += `<div class="section-label">${sec.section}</div>`;
+    html += `<div class="grid" data-si="${si}">`;
+    visibleIndices.forEach(mi => { html += renderCard(si, mi, draggable); });
+    html += `</div>`;
+  });
+  document.getElementById('app').innerHTML = html;
+  attachDrag();
+}
+
+// ---- Interaction ----
+function toggle(si, mi, seg) {
+  if (!gmMode) return;
+  const npc = sections[si].members[mi];
+  const f   = state[npc.name];
+  state[npc.name] = seg > f ? seg : seg - 1;
+  save(); render();
+}
+
+function resetOne(si, mi) {
+  const npc = sections[si].members[mi];
+  state[npc.name] = npc.start;
+  save(); render();
+}
+
+function resetAll() {
+  sections.forEach(sec => sec.members.forEach(m => { state[m.name] = m.start; }));
+  save(); render();
+}
+
+function toggleReveal(si, mi) {
+  const npc = sections[si].members[mi];
+  revealed[npc.name] = !revealed[npc.name];
+  save(); render();
+}
+
+function toggleHideNPC(si, mi) {
+  const npc = sections[si].members[mi];
+  hiddenNPCs[npc.name] = !hiddenNPCs[npc.name];
+  save();
+  fetch('/hidden', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: npc.name, hidden: hiddenNPCs[npc.name] }),
+  }).catch(() => {});
+  render();
+}
+
+// ---- GM Mode (password) ----
+function toggleGM() {
+  if (gmMode) {
+    gmMode = false;
+    sessionStorage.removeItem('sotw_gm');
+    render();
+  } else {
+    document.getElementById('pw-error').style.display = 'none';
+    document.getElementById('pw-input').value = '';
+    document.getElementById('pw-modal').classList.add('open');
+    setTimeout(() => document.getElementById('pw-input').focus(), 80);
+  }
+}
+
+function checkGMPassword() {
+  if (document.getElementById('pw-input').value === GM_PASSWORD) {
+    gmMode = true;
+    sessionStorage.setItem('sotw_gm', '1');
+    closePWModal();
+    render();
+  } else {
+    document.getElementById('pw-error').style.display = 'block';
+    document.getElementById('pw-input').value = '';
+    document.getElementById('pw-input').focus();
+  }
+}
+
+function closePWModal() {
+  document.getElementById('pw-modal').classList.remove('open');
+}
+
+// ---- Drag & Drop ----
+let dragSrc = null;
+let tDragSrc = null, tGhost = null, tOffX = 0, tOffY = 0;
+let tTimer = null, tStartX = 0, tStartY = 0;
+
+function attachDrag() {
+  document.querySelectorAll('.card').forEach(card => {
+
+    // Desktop
+    card.addEventListener('dragstart', e => {
+      dragSrc = { si: +card.dataset.si, mi: +card.dataset.mi };
+      setTimeout(() => card.classList.add('dragging'), 0);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      document.querySelectorAll('.card').forEach(c => c.classList.remove('drag-over'));
+    });
+    card.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      document.querySelectorAll('.card').forEach(c => c.classList.remove('drag-over'));
+      card.classList.add('drag-over');
+    });
+    card.addEventListener('drop', e => {
+      e.preventDefault();
+      if (!dragSrc) return;
+      const tsi = +card.dataset.si, tmi = +card.dataset.mi;
+      if (dragSrc.si === tsi && dragSrc.mi === tmi) { dragSrc = null; return; }
+      const [moved] = sections[dragSrc.si].members.splice(dragSrc.mi, 1);
+      const adj = (dragSrc.si === tsi && dragSrc.mi < tmi) ? tmi - 1 : tmi;
+      sections[tsi].members.splice(adj, 0, moved);
+      dragSrc = null;
+      save(); render();
+    });
+
+    // Touch (iPad)
+    card.addEventListener('touchstart', e => {
+      if (e.target.closest('svg')) return;
+      const t = e.touches[0];
+      tStartX = t.clientX; tStartY = t.clientY;
+      tTimer = setTimeout(() => {
+        tTimer = null;
+        startTouchDrag(card, t);
+      }, 350);
+    }, { passive: true });
+
+    card.addEventListener('touchmove', e => {
+      const t = e.touches[0];
+      if (tTimer) {
+        if (Math.abs(t.clientX - tStartX) > 8 || Math.abs(t.clientY - tStartY) > 8) {
+          clearTimeout(tTimer); tTimer = null;
+        }
+        return;
+      }
+      if (!tDragSrc) return;
+      e.preventDefault();
+      moveTouchDrag(t);
+    }, { passive: false });
+
+    card.addEventListener('touchend', e => {
+      clearTimeout(tTimer); tTimer = null;
+      if (tDragSrc) endTouchDrag(e.changedTouches[0]);
+    });
+
+    card.addEventListener('touchcancel', () => {
+      clearTimeout(tTimer); tTimer = null;
+      cleanupTouchDrag(); render();
+    });
+  });
+}
+
+function startTouchDrag(card, touch) {
+  tDragSrc = { si: +card.dataset.si, mi: +card.dataset.mi, el: card };
+  const rect = card.getBoundingClientRect();
+  tGhost = card.cloneNode(true);
+  tGhost.removeAttribute('draggable');
+  Object.assign(tGhost.style, {
+    position:'fixed', left:rect.left+'px', top:rect.top+'px', width:rect.width+'px',
+    opacity:'0.75', pointerEvents:'none', zIndex:'1000',
+    transform:'rotate(2deg) scale(1.04)', boxShadow:'0 10px 28px rgba(0,0,0,0.25)', transition:'none',
+  });
+  document.body.appendChild(tGhost);
+  card.style.opacity = '0.3';
+  tOffX = touch.clientX - rect.left;
+  tOffY = touch.clientY - rect.top;
+  document.body.classList.add('touch-dragging');
+}
+
+function moveTouchDrag(touch) {
+  if (!tGhost) return;
+  tGhost.style.left = (touch.clientX - tOffX) + 'px';
+  tGhost.style.top  = (touch.clientY - tOffY) + 'px';
+  const under  = document.elementFromPoint(touch.clientX, touch.clientY);
+  const target = under?.closest('.card[data-si]');
+  document.querySelectorAll('.card').forEach(c => c.classList.remove('drag-over'));
+  if (target && target !== tDragSrc?.el) target.classList.add('drag-over');
+}
+
+function endTouchDrag(touch) {
+  if (!tDragSrc) return;
+  const under  = document.elementFromPoint(touch.clientX, touch.clientY);
+  const target = under?.closest('.card[data-si]');
+  const src    = tDragSrc;
+  cleanupTouchDrag();
+  if (target && target !== src.el) {
+    const tsi = +target.dataset.si, tmi = +target.dataset.mi;
+    const [moved] = sections[src.si].members.splice(src.mi, 1);
+    const adj = (src.si === tsi && src.mi < tmi) ? tmi - 1 : tmi;
+    sections[tsi].members.splice(adj, 0, moved);
+    save();
+  }
+  render();
+}
+
+function cleanupTouchDrag() {
+  tGhost?.remove(); tGhost = null;
+  if (tDragSrc?.el) tDragSrc.el.style.opacity = '';
+  tDragSrc = null;
+  document.body.classList.remove('touch-dragging');
+  document.querySelectorAll('.card').forEach(c => c.classList.remove('drag-over'));
+}
+
+// ---- Add Clock Modal ----
+function openModal() {
+  if (!gmMode) return;
+  const sel = document.getElementById('m-section');
+  sel.innerHTML = sections.map((s, i) => `<option value="${i}">${s.section}</option>`).join('')
+                + '<option value="__new__">+ New Section…</option>';
+  document.getElementById('new-section-row').style.display = 'none';
+  ['m-name','m-pronouns','m-role','m-disposition','m-reward','m-note'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('m-start').value = 5;
+  document.getElementById('m-start-val').textContent = '5';
+  document.getElementById('m-error').style.display = 'none';
+  document.getElementById('modal').classList.add('open');
+  setTimeout(() => document.getElementById('m-name').focus(), 50);
+}
+
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+function toggleNewSection() {
+  document.getElementById('new-section-row').style.display =
+    document.getElementById('m-section').value === '__new__' ? 'block' : 'none';
+}
+
+function addClock() {
+  const name        = document.getElementById('m-name').value.trim();
+  const pronouns    = document.getElementById('m-pronouns').value.trim();
+  const role        = document.getElementById('m-role').value.trim();
+  const disposition = document.getElementById('m-disposition').value.trim().toUpperCase();
+  const start       = +document.getElementById('m-start').value;
+  const reward      = document.getElementById('m-reward').value.trim();
+  const note        = document.getElementById('m-note').value.trim();
+  const secVal      = document.getElementById('m-section').value;
+  const newSec      = document.getElementById('m-new-section').value.trim();
+
+  if (!name) { showErr('Name is required.'); return; }
+  if (sections.flatMap(s => s.members.map(m => m.name)).includes(name)) {
+    showErr('A clock with that name already exists.'); return;
+  }
+
+  const npc = { name, pronouns, role, disposition, start, reward };
+  if (note) npc.note = note;
+
+  if (secVal === '__new__') {
+    if (!newSec) { showErr('Please enter a section name.'); return; }
+    sections.push({ section: newSec, members: [npc] });
+  } else {
+    sections[+secVal].members.push(npc);
+  }
+
+  state[name]      = start;
+  revealed[name]   = false;
+  hiddenNPCs[name] = false;
+  save(); closeModal(); render();
+}
+
+function showErr(msg) {
+  const el = document.getElementById('m-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeModal(); closePWModal(); }
+});
+
+// ---- Init ----
+document.getElementById('scale-slider').value = cardScale;
+document.getElementById('scale-val').textContent = Math.round(cardScale * 100) + '%';
+document.getElementById('app').style.zoom = cardScale;
+render();
+loadNotesFromServer();
+loadHiddenFromServer();
+// Poll every 5 seconds so player browsers pick up GM hide/show changes
+setInterval(() => { if (!gmMode) loadHiddenFromServer(); }, 5000);
+</script>
+</body>
+</html>
