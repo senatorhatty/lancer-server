@@ -278,10 +278,17 @@ sections.forEach(sec => sec.members.forEach(m => {
 }));
 
 function save() {
+  // Keep localStorage as offline fallback
   localStorage.setItem('sotw_sections', JSON.stringify(sections));
   localStorage.setItem('sotw_state',    JSON.stringify(state));
   localStorage.setItem('sotw_revealed', JSON.stringify(revealed));
   localStorage.setItem('sotw_hidden',   JSON.stringify(hiddenNPCs));
+  // Push to server so all devices see the same thing
+  fetch('/gm-state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clocks: state, revealed, hidden: hiddenNPCs }),
+  }).catch(() => {});
 }
 
 function saveNote(name, text) {
@@ -290,29 +297,26 @@ function saveNote(name, text) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, text }),
-  }).catch(() => {}); // fail silently if server unreachable
+  }).catch(() => {});
 }
 
-async function loadNotesFromServer() {
+async function loadServerState() {
   try {
-    const r = await fetch('/notes');
-    if (r.ok) {
-      const data = await r.json();
-      playerNotes = data;
-      render();
+    const [gmRes, notesRes] = await Promise.all([
+      fetch('/gm-state'),
+      fetch('/notes'),
+    ]);
+    if (gmRes.ok) {
+      const gm = await gmRes.json();
+      if (gm.clocks)   Object.assign(state,      gm.clocks);
+      if (gm.revealed) Object.assign(revealed,    gm.revealed);
+      if (gm.hidden)   Object.assign(hiddenNPCs,  gm.hidden);
     }
-  } catch {}
-}
-
-async function loadHiddenFromServer() {
-  try {
-    const r = await fetch('/hidden');
-    if (r.ok) {
-      const data = await r.json();
-      hiddenNPCs = data;
-      render();
+    if (notesRes.ok) {
+      playerNotes = await notesRes.json();
     }
-  } catch {}
+    render();
+  } catch {} // if server unreachable, localStorage values stand
 }
 
 // ---- Sort & Scale ----
@@ -505,13 +509,7 @@ function toggleReveal(si, mi) {
 function toggleHideNPC(si, mi) {
   const npc = sections[si].members[mi];
   hiddenNPCs[npc.name] = !hiddenNPCs[npc.name];
-  save();
-  fetch('/hidden', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: npc.name, hidden: hiddenNPCs[npc.name] }),
-  }).catch(() => {});
-  render();
+  save(); render();
 }
 
 // ---- GM Mode (password) ----
@@ -738,10 +736,7 @@ document.getElementById('scale-slider').value = cardScale;
 document.getElementById('scale-val').textContent = Math.round(cardScale * 100) + '%';
 document.getElementById('app').style.zoom = cardScale;
 render();
-loadNotesFromServer();
-loadHiddenFromServer();
-// Poll every 5 seconds so player browsers pick up GM hide/show changes
-setInterval(() => { if (!gmMode) loadHiddenFromServer(); }, 5000);
+loadServerState();
 </script>
 </body>
 </html>
