@@ -1,19 +1,27 @@
 #!/bin/bash
-# Push updated HTML and server.js to the live server, then restart.
-# Usage: bash ~/Desktop/lancer-server-setup/update.sh
+# Deploy latest code from git to the live server, then restart.
+# Run from your local machine: bash config/update.sh
+# Requires SSH access to chatty@aphasia.loquacity.org
 
 set -e
 
-STAGING="$(dirname "$0")"
-HTML_SRC="/Users/chatty/Library/Mobile Documents/com~apple~CloudDocs/! Lancer Campaign/sotw_relationship_clocks.html"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REMOTE="chatty@aphasia.loquacity.org"
 SERVE_DIR="/opt/lancer-server"
 
-echo "==> Copying updated files..."
-sudo cp "$HTML_SRC"           "$SERVE_DIR/public/sotw_relationship_clocks.html"
-sudo cp "$STAGING/server.js"  "$SERVE_DIR/server.js"
+echo "==> Pushing local git commits..."
+git -C "$REPO_ROOT" push
 
-echo "==> Restarting lancer server..."
-sudo launchctl unload /Library/LaunchDaemons/com.lancer.server.plist
-sudo launchctl load   /Library/LaunchDaemons/com.lancer.server.plist
+echo "==> Deploying to server..."
+ssh "$REMOTE" bash << EOF
+  set -e
+  cd "$SERVE_DIR"
+  sudo git pull
+  sudo launchctl unload /Library/LaunchDaemons/com.lancer.server.plist
+  sudo launchctl load   /Library/LaunchDaemons/com.lancer.server.plist
+  sudo nginx -t && sudo nginx -s reload
+  echo "Server restarted."
+EOF
 
+echo ""
 echo "Done. https://lancer.loquacity.org"

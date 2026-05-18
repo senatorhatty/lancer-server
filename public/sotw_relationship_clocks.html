@@ -45,6 +45,8 @@ h1{font-family:'Cinzel',serif;font-size:18px;color:#7a5500;letter-spacing:2px;ma
 .revealed-badge{font-size:8px;color:#267838;font-family:'Cinzel',serif;letter-spacing:.5px;}
 .hide-npc-btn{font-size:8px;font-family:'Cinzel',serif;padding:2px 7px;border-radius:3px;cursor:pointer;border:1px solid #bbb;background:#f5f0e8;color:#8a7a62;touch-action:manipulation;}
 .hide-npc-btn:hover{background:#e8e0d0;}
+.edit-npc-btn{font-size:8px;font-family:'Cinzel',serif;padding:2px 7px;border-radius:3px;cursor:pointer;border:1px solid #9a7800;background:#fdf5d0;color:#7a5500;touch-action:manipulation;}
+.edit-npc-btn:hover{background:#f5e8b0;}
 .hidden-from-players{font-family:'Cinzel',serif;font-size:8px;color:#aaa098;letter-spacing:1px;margin-bottom:6px;}
 .reset-btn{font-size:9px;background:none;border:1px solid #bbb;border-radius:3px;padding:3px 8px;cursor:pointer;color:#8a7a62;margin-top:4px;font-family:'Source Serif 4',serif;touch-action:manipulation;}
 .reset-btn:hover{background:#f5f0e8;}
@@ -72,6 +74,15 @@ h1{font-family:'Cinzel',serif;font-size:18px;color:#7a5500;letter-spacing:2px;ma
 .legend{display:flex;gap:14px;margin-bottom:12px;flex-wrap:wrap;}
 .legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:#5a4e3a;}
 .legend-swatch{width:14px;height:14px;border-radius:50%;border:2px solid;}
+/* Loading overlay — shown until first server fetch completes */
+.loading-overlay{position:fixed;inset:0;background:#f5f0e8;z-index:500;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;}
+.loading-spinner{width:32px;height:32px;border:3px solid #e0d0b0;border-top-color:#c09820;border-radius:50%;animation:spin .8s linear infinite;}
+.loading-text{font-family:'Cinzel',serif;font-size:12px;color:#8a7a62;letter-spacing:2px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+/* Update banner (players only) */
+.update-banner{display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#267838;color:#fff;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;padding:10px 22px;border-radius:20px;cursor:pointer;box-shadow:0 4px 16px rgba(38,120,56,.4);z-index:200;border:none;white-space:nowrap;animation:glow 2s ease-in-out infinite;}
+.update-banner.visible{display:block;}
+@keyframes glow{0%,100%{box-shadow:0 4px 16px rgba(38,120,56,.4);}50%{box-shadow:0 4px 28px rgba(38,120,56,.8);}}
 /* Modals */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center;padding:16px;}
 .modal-overlay.open{display:flex;}
@@ -89,10 +100,21 @@ h1{font-family:'Cinzel',serif;font-size:18px;color:#7a5500;letter-spacing:2px;ma
 .btn-cancel:hover{background:#e8e0d0;}
 .btn-add{background:#fdf7e6;border-color:#c09820;color:#7a5500;}
 .btn-add:hover{background:#f5e8b0;}
+.btn-delete{background:#fdf0ee;border-color:#c03828;color:#9a2010;}
+.btn-delete:hover{background:#f5d5d0;}
 .error-msg{font-size:10px;color:#c03828;margin-top:6px;display:none;}
 </style>
 </head>
 <body>
+
+<!-- Loading overlay — hides everything until server state arrives (prevents NPC flash) -->
+<div class="loading-overlay" id="loading">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Loading…</div>
+</div>
+
+<!-- Update banner — appears on player screens when GM changes something -->
+<button class="update-banner" id="update-banner" onclick="applyUpdates()">↻ Updates available — tap to refresh</button>
 
 <div class="gm-banner" id="gm-banner">GM MODE — HIDDEN REWARDS &amp; NPCS VISIBLE</div>
 
@@ -122,7 +144,7 @@ h1{font-family:'Cinzel',serif;font-size:18px;color:#7a5500;letter-spacing:2px;ma
       oninput="setScale(this.value)">
     <span id="scale-val">100%</span>
   </div>
-  <button class="ctrl-btn add-btn" id="add-btn" onclick="openModal()" style="display:none">+ New Clock</button>
+  <button class="ctrl-btn add-btn" id="add-btn" onclick="openAddModal()" style="display:none">+ New Clock</button>
   <button class="ctrl-btn reset-all" id="reset-btn" onclick="resetAll()" style="display:none">Reset All</button>
 </div>
 
@@ -144,7 +166,7 @@ h1{font-family:'Cinzel',serif;font-size:18px;color:#7a5500;letter-spacing:2px;ma
 </div>
 
 <!-- Add Clock modal -->
-<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+<div class="modal-overlay" id="add-modal" onclick="if(event.target===this)closeAddModal()">
   <div class="modal">
     <h2>New Relationship Clock</h2>
     <div class="form-row">
@@ -186,8 +208,50 @@ h1{font-family:'Cinzel',serif;font-size:18px;color:#7a5500;letter-spacing:2px;ma
     </div>
     <div class="error-msg" id="m-error"></div>
     <div class="modal-btns">
-      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-cancel" onclick="closeAddModal()">Cancel</button>
       <button class="btn-add" onclick="addClock()">Add Clock</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit NPC modal -->
+<div class="modal-overlay" id="edit-modal" onclick="if(event.target===this)closeEditModal()">
+  <div class="modal">
+    <h2>Edit NPC</h2>
+    <div class="form-row">
+      <label>Name</label>
+      <input type="text" id="e-name" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <label>Pronouns</label>
+      <input type="text" id="e-pronouns" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <label>Role / Affiliation</label>
+      <input type="text" id="e-role" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <label>Disposition (optional)</label>
+      <input type="text" id="e-disposition" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <label>Starting Value: <span id="e-start-val">5</span>/10</label>
+      <input type="range" id="e-start" min="0" max="10" value="5"
+        oninput="document.getElementById('e-start-val').textContent=this.value">
+    </div>
+    <div class="form-row">
+      <label>Friendly Reward</label>
+      <textarea id="e-reward"></textarea>
+    </div>
+    <div class="form-row">
+      <label>Note (optional)</label>
+      <input type="text" id="e-note" autocomplete="off">
+    </div>
+    <div class="error-msg" id="e-error"></div>
+    <div class="modal-btns">
+      <button class="btn-delete" onclick="deleteNPC()">Delete NPC</button>
+      <button class="btn-cancel" onclick="closeEditModal()">Cancel</button>
+      <button class="btn-add" onclick="saveEdit()">Save</button>
     </div>
   </div>
 </div>
@@ -257,81 +321,89 @@ const DEFAULT_SECTIONS = [
   ]},
 ];
 
-// ---- State ----
-let sections   = JSON.parse(localStorage.getItem('sotw_sections')  || 'null');
-if (!sections) sections = DEFAULT_SECTIONS.map(s => ({section:s.section, members:s.members.map(m=>({...m}))}));
+// ── State — all authoritative on the server, no localStorage ──────────────
+let sections   = [];
+let clocks     = {};
+let revealed   = {};
+let hiddenNPCs = {};
+let notes      = {};
 
-let state      = JSON.parse(localStorage.getItem('sotw_state')     || '{}');
-let revealed   = JSON.parse(localStorage.getItem('sotw_revealed')  || '{}');
-let hiddenNPCs = JSON.parse(localStorage.getItem('sotw_hidden')    || '{}');
-// GM mode uses sessionStorage — clears when the browser tab closes
-let gmMode      = sessionStorage.getItem('sotw_gm') === '1';
-let sortMode    = 'custom';
-let cardScale   = +(localStorage.getItem('sotw_scale') || '1');
-let playerNotes = JSON.parse(localStorage.getItem('sotw_notes') || '{}');
+// ── Per-device preferences (fine to keep local) ───────────────────────────
+let gmMode    = sessionStorage.getItem('sotw_gm') === '1';
+let sortMode  = 'custom';
+let cardScale = +(localStorage.getItem('sotw_scale') || '1');
 
-sections.forEach(sec => sec.members.forEach(m => {
-  if (state[m.name]      === undefined) state[m.name]      = m.start;
-  if (revealed[m.name]   === undefined) revealed[m.name]   = false;
-  if (hiddenNPCs[m.name] === undefined) hiddenNPCs[m.name] = false;
-  if (playerNotes[m.name] === undefined) playerNotes[m.name] = '';
-}));
+// ── Edit modal target ─────────────────────────────────────────────────────
+let editTarget = null; // { si, mi }
 
-function save() {
-  // Keep localStorage as offline fallback
-  localStorage.setItem('sotw_sections', JSON.stringify(sections));
-  localStorage.setItem('sotw_state',    JSON.stringify(state));
-  localStorage.setItem('sotw_revealed', JSON.stringify(revealed));
-  localStorage.setItem('sotw_hidden',   JSON.stringify(hiddenNPCs));
-  // Push to server so all devices see the same thing
-  fetch('/gm-state', {
+// ── Server sync ───────────────────────────────────────────────────────────
+async function fetchGameState() {
+  const r = await fetch('/gamestate');
+  if (!r.ok) throw new Error('server error');
+  return r.json();
+}
+
+function applyGameState(data) {
+  if (data.sections && data.sections.length > 0) {
+    sections = data.sections;
+  } else {
+    // First run — seed server with defaults
+    sections = DEFAULT_SECTIONS.map(s => ({ section: s.section, members: s.members.map(m => ({...m})) }));
+    patchState({ sections });
+  }
+  clocks     = data.clocks   || {};
+  revealed   = data.revealed || {};
+  hiddenNPCs = data.hidden   || {};
+  notes      = data.notes    || {};
+  // Fill defaults for any NPCs missing from saved state
+  sections.forEach(sec => sec.members.forEach(m => {
+    if (clocks[m.name]     === undefined) clocks[m.name]     = m.start;
+    if (revealed[m.name]   === undefined) revealed[m.name]   = false;
+    if (hiddenNPCs[m.name] === undefined) hiddenNPCs[m.name] = false;
+    if (notes[m.name]      === undefined) notes[m.name]      = '';
+  }));
+}
+
+function patchState(patch) {
+  fetch('/gamestate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clocks: state, revealed, hidden: hiddenNPCs }),
+    body: JSON.stringify(patch),
   }).catch(() => {});
 }
 
-function saveNote(name, text) {
-  playerNotes[name] = text;
-  fetch('/notes', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, text }),
-  }).catch(() => {});
+// ── SSE — push notifications from server ──────────────────────────────────
+function connectSSE() {
+  const es = new EventSource('/events');
+  es.onmessage = e => {
+    if (e.data === 'connected') return;
+    if (gmMode) {
+      // GM gets updates silently applied
+      fetchGameState().then(data => { applyGameState(data); render(); }).catch(() => {});
+    } else {
+      document.getElementById('update-banner').classList.add('visible');
+    }
+  };
+  es.onerror = () => { es.close(); setTimeout(connectSSE, 3000); };
 }
 
-async function loadServerState() {
-  try {
-    const [gmRes, notesRes] = await Promise.all([
-      fetch('/gm-state'),
-      fetch('/notes'),
-    ]);
-    if (gmRes.ok) {
-      const gm = await gmRes.json();
-      if (gm.clocks)   Object.assign(state,      gm.clocks);
-      if (gm.revealed) Object.assign(revealed,    gm.revealed);
-      if (gm.hidden)   Object.assign(hiddenNPCs,  gm.hidden);
-    }
-    if (notesRes.ok) {
-      playerNotes = await notesRes.json();
-    }
-    render();
-  } catch {} // if server unreachable, localStorage values stand
+async function applyUpdates() {
+  document.getElementById('update-banner').classList.remove('visible');
+  try { const data = await fetchGameState(); applyGameState(data); render(); } catch {}
 }
 
-// ---- Sort & Scale ----
+// ── Sort & Scale ──────────────────────────────────────────────────────────
 function setSort(mode) {
   sortMode = mode;
-  ['custom','name','standing'].forEach(m => {
-    document.getElementById('sort-' + m).classList.toggle('active', m === mode);
-  });
+  ['custom','name','standing'].forEach(m =>
+    document.getElementById('sort-' + m).classList.toggle('active', m === mode));
   render();
 }
 
 function sortedIndices(members) {
   const idx = members.map((_, i) => i);
   if (sortMode === 'name')     idx.sort((a,b) => members[a].name.localeCompare(members[b].name));
-  if (sortMode === 'standing') idx.sort((a,b) => state[members[b].name] - state[members[a].name]);
+  if (sortMode === 'standing') idx.sort((a,b) => (clocks[members[b].name] ?? 0) - (clocks[members[a].name] ?? 0));
   return idx;
 }
 
@@ -342,21 +414,20 @@ function setScale(val) {
   document.getElementById('scale-val').textContent = Math.round(cardScale * 100) + '%';
 }
 
-// ---- Zone helpers ----
+// ── Zone helpers ──────────────────────────────────────────────────────────
 function zone(seg) { return seg <= 3 ? 'frosty' : seg <= 7 ? 'neutral' : 'friendly'; }
 function zoneLabel(filled) {
-  if (filled <= 3) return { text:'FROSTY',  color:'#9a2010' };
+  if (filled <= 3) return { text:'FROSTY',   color:'#9a2010' };
   if (filled <= 7) return { text:'NEUTRAL',  color:'#8a6800' };
   return               { text:'FRIENDLY', color:'#267838' };
 }
 
-// ---- SVG Clock ----
+// ── SVG Clock ─────────────────────────────────────────────────────────────
 function svgClock(si, mi) {
   const npc    = sections[si].members[mi];
-  const filled = state[npc.name];
+  const filled = clocks[npc.name] ?? npc.start;
   const cx = 48, cy = 48, r = 42, GAP = 3;
   let paths = '';
-
   for (let i = 1; i <= 10; i++) {
     const sRad = (-90 + (i-1)*36 + GAP/2) * Math.PI/180;
     const eRad = (-90 +  i   *36 - GAP/2) * Math.PI/180;
@@ -365,41 +436,37 @@ function svgClock(si, mi) {
     const c  = COLORS[zone(i)];
     const fill   = i <= filled ? c.fill   : c.empty;
     const stroke = i <= filled ? c.stroke : c.emptyStroke;
-    const cursor = gmMode ? 'pointer' : 'default';
     paths += `<path d="M48,48 L${x1.toFixed(2)},${y1.toFixed(2)} A42,42 0 0,1 ${x2.toFixed(2)},${y2.toFixed(2)} Z"`
            + ` fill="${fill}" stroke="${stroke}" stroke-width="1"`
-           + ` data-seg="${i}" style="cursor:${cursor}"`
+           + ` data-seg="${i}" style="cursor:${gmMode ? 'pointer' : 'default'}"`
            + ` onclick="toggle(${si},${mi},${i})"/>`;
   }
-
   const zl = zoneLabel(filled);
   paths += `<circle cx="48" cy="48" r="17" fill="white" stroke="#e0d8cc" stroke-width="1.5" style="pointer-events:none"/>`;
   paths += `<text x="48" y="45" text-anchor="middle" dominant-baseline="middle" font-size="14" font-weight="700"`
          + ` fill="${zl.color}" font-family="Cinzel,serif" style="pointer-events:none">${filled}</text>`;
   paths += `<text x="48" y="57" text-anchor="middle" dominant-baseline="middle" font-size="8"`
          + ` fill="#8a7a62" style="pointer-events:none">/ 10</text>`;
-
   return `<svg width="96" height="96" viewBox="0 0 96 96" draggable="false"`
        + ` ontouchend="svgTouchEnd(event,${si},${mi})">${paths}</svg>`;
 }
 
 function svgTouchEnd(e, si, mi) {
   if (!gmMode) return;
-  e.preventDefault();
-  e.stopPropagation();
-  const t = e.changedTouches[0];
+  e.preventDefault(); e.stopPropagation();
+  const t  = e.changedTouches[0];
   const el = document.elementFromPoint(t.clientX, t.clientY);
   const seg = el && +el.dataset.seg;
   if (seg) toggle(si, mi, seg);
 }
 
-// ---- Render ----
+// ── Render ────────────────────────────────────────────────────────────────
 function renderCard(si, mi, draggable) {
-  const npc       = sections[si].members[mi];
-  const filled    = state[npc.name];
-  const isRev     = revealed[npc.name];
-  const isHidden  = hiddenNPCs[npc.name];
-  const zl        = zoneLabel(filled);
+  const npc        = sections[si].members[mi];
+  const filled     = clocks[npc.name] ?? npc.start;
+  const isRev      = revealed[npc.name];
+  const isHidden   = hiddenNPCs[npc.name];
+  const zl         = zoneLabel(filled);
   const isFriendly = filled >= 8;
 
   const pronounsHtml = npc.pronouns ? `<span class="card-pronouns">${npc.pronouns}</span>` : '';
@@ -407,7 +474,6 @@ function renderCard(si, mi, draggable) {
   if (npc.disposition) statusParts.push(npc.disposition);
   statusParts.push(`${filled}/10`);
 
-  // Reward block
   let rewardHtml;
   if (gmMode) {
     const revClass = isRev ? 'hide' : 'reveal';
@@ -419,6 +485,7 @@ function renderCard(si, mi, draggable) {
           <button class="reveal-btn ${revClass}" onclick="toggleReveal(${si},${mi})">${revLabel}</button>
           ${isRev ? '<span class="revealed-badge">REVEALED</span>' : ''}
           <button class="hide-npc-btn" onclick="toggleHideNPC(${si},${mi})">${isHidden ? 'Show NPC' : 'Hide NPC'}</button>
+          <button class="edit-npc-btn" onclick="openEditModal(${si},${mi})">Edit</button>
         </div>
       </div>`;
   } else if (isRev) {
@@ -430,10 +497,10 @@ function renderCard(si, mi, draggable) {
     rewardHtml = `<div class="reward-wrap">${hint}</div>`;
   }
 
-  const noteHtml  = npc.note ? `<div class="note-text">&#9888; ${npc.note}</div>` : '';
-  const resetHtml = gmMode   ? `<button class="reset-btn" onclick="resetOne(${si},${mi})">Reset to ${npc.start}</button>` : '';
-  const safeKey   = npc.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-  const partyNote = `<textarea class="note-input" placeholder="Party notes…" oninput="saveNote('${safeKey}',this.value)">${(playerNotes[npc.name]||'').replace(/</g,'&lt;')}</textarea>`;
+  const noteHtml   = npc.note ? `<div class="note-text">&#9888; ${npc.note}</div>` : '';
+  const resetHtml  = gmMode ? `<button class="reset-btn" onclick="resetOne(${si},${mi})">Reset to ${npc.start}</button>` : '';
+  const safeKey    = npc.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  const partyNote  = `<textarea class="note-input" placeholder="Party notes…" oninput="saveNote('${safeKey}',this.value)">${(notes[npc.name]||'').replace(/</g,'&lt;')}</textarea>`;
   const hiddenBadge = (gmMode && isHidden) ? `<div class="hidden-from-players">HIDDEN FROM PLAYERS</div>` : '';
 
   return `
@@ -454,22 +521,17 @@ function renderCard(si, mi, draggable) {
 }
 
 function render() {
-  const gmToggle = document.getElementById('gm-toggle');
-  const gmBanner = document.getElementById('gm-banner');
-  const addBtn   = document.getElementById('add-btn');
-  const resetBtn = document.getElementById('reset-btn');
-  gmToggle.classList.toggle('active', gmMode);
-  gmBanner.classList.toggle('visible', gmMode);
-  addBtn.style.display   = gmMode ? 'inline-block' : 'none';
-  resetBtn.style.display = gmMode ? 'inline-block' : 'none';
+  document.getElementById('gm-toggle').classList.toggle('active', gmMode);
+  document.getElementById('gm-banner').classList.toggle('visible', gmMode);
+  document.getElementById('add-btn').style.display   = gmMode ? 'inline-block' : 'none';
+  document.getElementById('reset-btn').style.display = gmMode ? 'inline-block' : 'none';
 
   const draggable = gmMode && sortMode === 'custom';
   let html = '';
   sections.forEach((sec, si) => {
-    const visibleIndices = sortedIndices(sec.members).filter(mi => {
-      const npc = sec.members[mi];
-      return gmMode || !hiddenNPCs[npc.name];
-    });
+    const visibleIndices = sortedIndices(sec.members).filter(mi =>
+      gmMode || !hiddenNPCs[sec.members[mi].name]
+    );
     if (visibleIndices.length === 0) return;
     html += `<div class="section-label">${sec.section}</div>`;
     html += `<div class="grid" data-si="${si}">`;
@@ -480,39 +542,53 @@ function render() {
   attachDrag();
 }
 
-// ---- Interaction ----
+// ── Interactions ──────────────────────────────────────────────────────────
 function toggle(si, mi, seg) {
   if (!gmMode) return;
   const npc = sections[si].members[mi];
-  const f   = state[npc.name];
-  state[npc.name] = seg > f ? seg : seg - 1;
-  save(); render();
+  const f   = clocks[npc.name];
+  clocks[npc.name] = seg > f ? seg : seg - 1;
+  patchState({ clocks: { [npc.name]: clocks[npc.name] } });
+  render();
 }
 
 function resetOne(si, mi) {
   const npc = sections[si].members[mi];
-  state[npc.name] = npc.start;
-  save(); render();
+  clocks[npc.name] = npc.start;
+  patchState({ clocks: { [npc.name]: npc.start } });
+  render();
 }
 
 function resetAll() {
-  sections.forEach(sec => sec.members.forEach(m => { state[m.name] = m.start; }));
-  save(); render();
+  const patch = {};
+  sections.forEach(sec => sec.members.forEach(m => {
+    clocks[m.name] = m.start;
+    patch[m.name]  = m.start;
+  }));
+  patchState({ clocks: patch });
+  render();
 }
 
 function toggleReveal(si, mi) {
   const npc = sections[si].members[mi];
   revealed[npc.name] = !revealed[npc.name];
-  save(); render();
+  patchState({ revealed: { [npc.name]: revealed[npc.name] } });
+  render();
 }
 
 function toggleHideNPC(si, mi) {
   const npc = sections[si].members[mi];
   hiddenNPCs[npc.name] = !hiddenNPCs[npc.name];
-  save(); render();
+  patchState({ hidden: { [npc.name]: hiddenNPCs[npc.name] } });
+  render();
 }
 
-// ---- GM Mode (password) ----
+function saveNote(name, text) {
+  notes[name] = text;
+  patchState({ notes: { [name]: text } });
+}
+
+// ── GM Mode ───────────────────────────────────────────────────────────────
 function toggleGM() {
   if (gmMode) {
     gmMode = false;
@@ -539,19 +615,15 @@ function checkGMPassword() {
   }
 }
 
-function closePWModal() {
-  document.getElementById('pw-modal').classList.remove('open');
-}
+function closePWModal() { document.getElementById('pw-modal').classList.remove('open'); }
 
-// ---- Drag & Drop ----
+// ── Drag & Drop ───────────────────────────────────────────────────────────
 let dragSrc = null;
 let tDragSrc = null, tGhost = null, tOffX = 0, tOffY = 0;
 let tTimer = null, tStartX = 0, tStartY = 0;
 
 function attachDrag() {
   document.querySelectorAll('.card').forEach(card => {
-
-    // Desktop
     card.addEventListener('dragstart', e => {
       dragSrc = { si: +card.dataset.si, mi: +card.dataset.mi };
       setTimeout(() => card.classList.add('dragging'), 0);
@@ -576,18 +648,15 @@ function attachDrag() {
       const adj = (dragSrc.si === tsi && dragSrc.mi < tmi) ? tmi - 1 : tmi;
       sections[tsi].members.splice(adj, 0, moved);
       dragSrc = null;
-      save(); render();
+      patchState({ sections });
+      render();
     });
 
-    // Touch (iPad)
     card.addEventListener('touchstart', e => {
       if (e.target.closest('svg')) return;
       const t = e.touches[0];
       tStartX = t.clientX; tStartY = t.clientY;
-      tTimer = setTimeout(() => {
-        tTimer = null;
-        startTouchDrag(card, t);
-      }, 350);
+      tTimer = setTimeout(() => { tTimer = null; startTouchDrag(card, t); }, 350);
     }, { passive: true });
 
     card.addEventListener('touchmove', e => {
@@ -653,7 +722,7 @@ function endTouchDrag(touch) {
     const [moved] = sections[src.si].members.splice(src.mi, 1);
     const adj = (src.si === tsi && src.mi < tmi) ? tmi - 1 : tmi;
     sections[tsi].members.splice(adj, 0, moved);
-    save();
+    patchState({ sections });
   }
   render();
 }
@@ -666,8 +735,8 @@ function cleanupTouchDrag() {
   document.querySelectorAll('.card').forEach(c => c.classList.remove('drag-over'));
 }
 
-// ---- Add Clock Modal ----
-function openModal() {
+// ── Add Clock Modal ───────────────────────────────────────────────────────
+function openAddModal() {
   if (!gmMode) return;
   const sel = document.getElementById('m-section');
   sel.innerHTML = sections.map((s, i) => `<option value="${i}">${s.section}</option>`).join('')
@@ -679,11 +748,11 @@ function openModal() {
   document.getElementById('m-start').value = 5;
   document.getElementById('m-start-val').textContent = '5';
   document.getElementById('m-error').style.display = 'none';
-  document.getElementById('modal').classList.add('open');
+  document.getElementById('add-modal').classList.add('open');
   setTimeout(() => document.getElementById('m-name').focus(), 50);
 }
 
-function closeModal() { document.getElementById('modal').classList.remove('open'); }
+function closeAddModal() { document.getElementById('add-modal').classList.remove('open'); }
 
 function toggleNewSection() {
   document.getElementById('new-section-row').style.display =
@@ -701,42 +770,147 @@ function addClock() {
   const secVal      = document.getElementById('m-section').value;
   const newSec      = document.getElementById('m-new-section').value.trim();
 
-  if (!name) { showErr('Name is required.'); return; }
+  if (!name) { showAddErr('Name is required.'); return; }
   if (sections.flatMap(s => s.members.map(m => m.name)).includes(name)) {
-    showErr('A clock with that name already exists.'); return;
+    showAddErr('A clock with that name already exists.'); return;
   }
 
   const npc = { name, pronouns, role, disposition, start, reward };
   if (note) npc.note = note;
 
   if (secVal === '__new__') {
-    if (!newSec) { showErr('Please enter a section name.'); return; }
+    if (!newSec) { showAddErr('Please enter a section name.'); return; }
     sections.push({ section: newSec, members: [npc] });
   } else {
     sections[+secVal].members.push(npc);
   }
 
-  state[name]      = start;
+  clocks[name]     = start;
   revealed[name]   = false;
   hiddenNPCs[name] = false;
-  save(); closeModal(); render();
+  notes[name]      = '';
+
+  patchState({
+    sections,
+    clocks:   { [name]: start },
+    revealed: { [name]: false },
+    hidden:   { [name]: false },
+  });
+
+  closeAddModal();
+  render();
 }
 
-function showErr(msg) {
+function showAddErr(msg) {
   const el = document.getElementById('m-error');
   el.textContent = msg; el.style.display = 'block';
 }
 
+// ── Edit NPC Modal ────────────────────────────────────────────────────────
+function openEditModal(si, mi) {
+  if (!gmMode) return;
+  editTarget = { si, mi };
+  const npc = sections[si].members[mi];
+  document.getElementById('e-name').value            = npc.name;
+  document.getElementById('e-pronouns').value        = npc.pronouns || '';
+  document.getElementById('e-role').value            = npc.role || '';
+  document.getElementById('e-disposition').value     = npc.disposition || '';
+  document.getElementById('e-start').value           = npc.start;
+  document.getElementById('e-start-val').textContent = npc.start;
+  document.getElementById('e-reward').value          = npc.reward || '';
+  document.getElementById('e-note').value            = npc.note || '';
+  document.getElementById('e-error').style.display   = 'none';
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.remove('open');
+  editTarget = null;
+}
+
+function saveEdit() {
+  if (!editTarget) return;
+  const { si, mi } = editTarget;
+  const oldName     = sections[si].members[mi].name;
+  const newName     = document.getElementById('e-name').value.trim();
+  const pronouns    = document.getElementById('e-pronouns').value.trim();
+  const role        = document.getElementById('e-role').value.trim();
+  const disposition = document.getElementById('e-disposition').value.trim().toUpperCase();
+  const start       = +document.getElementById('e-start').value;
+  const reward      = document.getElementById('e-reward').value.trim();
+  const note        = document.getElementById('e-note').value.trim();
+
+  if (!newName) { showEditErr('Name is required.'); return; }
+  if (newName !== oldName && sections.flatMap(s => s.members.map(m => m.name)).includes(newName)) {
+    showEditErr('That name is already in use.'); return;
+  }
+
+  // Migrate state keys if name changed
+  if (newName !== oldName) {
+    clocks[newName]     = clocks[oldName];     delete clocks[oldName];
+    revealed[newName]   = revealed[oldName];   delete revealed[oldName];
+    hiddenNPCs[newName] = hiddenNPCs[oldName]; delete hiddenNPCs[oldName];
+    notes[newName]      = notes[oldName];      delete notes[oldName];
+  }
+
+  const updated = { name: newName, pronouns, role, disposition, start, reward };
+  if (note) updated.note = note;
+  sections[si].members[mi] = updated;
+
+  // Send full state since key migration can't be expressed as a simple patch
+  patchState({ sections, clocks, revealed, hidden: hiddenNPCs, notes });
+  closeEditModal();
+  render();
+}
+
+function deleteNPC() {
+  if (!editTarget) return;
+  const { si, mi } = editTarget;
+  const name = sections[si].members[mi].name;
+  sections[si].members.splice(mi, 1);
+  delete clocks[name];
+  delete revealed[name];
+  delete hiddenNPCs[name];
+  delete notes[name];
+  patchState({ sections, clocks, revealed, hidden: hiddenNPCs, notes });
+  closeEditModal();
+  render();
+}
+
+function showEditErr(msg) {
+  const el = document.getElementById('e-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+// ── Keyboard ──────────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeModal(); closePWModal(); }
+  if (e.key === 'Escape') { closeAddModal(); closePWModal(); closeEditModal(); }
 });
 
-// ---- Init ----
-document.getElementById('scale-slider').value = cardScale;
-document.getElementById('scale-val').textContent = Math.round(cardScale * 100) + '%';
-document.getElementById('app').style.zoom = cardScale;
-render();
-loadServerState();
+// ── Init ──────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const data = await fetchGameState();
+    applyGameState(data);
+  } catch {
+    // Server unreachable — show defaults so the page isn't blank
+    sections = DEFAULT_SECTIONS.map(s => ({ section: s.section, members: s.members.map(m => ({...m})) }));
+    sections.forEach(sec => sec.members.forEach(m => {
+      clocks[m.name]     = m.start;
+      revealed[m.name]   = false;
+      hiddenNPCs[m.name] = false;
+      notes[m.name]      = '';
+    }));
+  }
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('scale-slider').value = cardScale;
+  document.getElementById('scale-val').textContent = Math.round(cardScale * 100) + '%';
+  document.getElementById('app').style.zoom = cardScale;
+  render();
+  connectSSE();
+}
+
+init();
 </script>
 </body>
 </html>
